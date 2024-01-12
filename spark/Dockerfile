@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 # syntax=docker/dockerfile:1
-FROM python:3.9-bullseye
+FROM python:3.11.7-bullseye
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -28,51 +28,6 @@ RUN apt-get update && \
       ssh && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
-
-# Install Jupyter and other python deps
-COPY requirements.txt .
-RUN pip3 install -r requirements.txt
-
-# Add scala kernel via spylon-kernel
-RUN python3 -m spylon_kernel install
-
-# Download and install IJava jupyter kernel
-RUN curl https://github.com/SpencerPark/IJava/releases/download/v1.3.0/ijava-1.3.0.zip -Lo ijava-1.3.0.zip \
-  && unzip ijava-1.3.0.zip \
-  && python3 install.py --sys-prefix \
-  && rm ijava-1.3.0.zip
-
-# Optional env variables
-ENV SPARK_HOME=${SPARK_HOME:-"/opt/spark"}
-ENV PYTHONPATH=$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-0.10.9.7-src.zip:$PYTHONPATH
-
-WORKDIR ${SPARK_HOME}
-
-ENV SPARK_VERSION=3.5.0
-ENV SPARK_MAJOR_VERSION=3.5
-ENV ICEBERG_VERSION=1.4.2
-
-# Download spark
-RUN mkdir -p ${SPARK_HOME} \
- && curl https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz -o spark-${SPARK_VERSION}-bin-hadoop3.tgz \
- && tar xvzf spark-${SPARK_VERSION}-bin-hadoop3.tgz --directory /opt/spark --strip-components 1 \
- && rm -rf spark-${SPARK_VERSION}-bin-hadoop3.tgz
-
-# Download iceberg spark runtime
-RUN curl https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-${SPARK_MAJOR_VERSION}_2.12/${ICEBERG_VERSION}/iceberg-spark-runtime-${SPARK_MAJOR_VERSION}_2.12-${ICEBERG_VERSION}.jar -Lo /opt/spark/jars/iceberg-spark-runtime-${SPARK_MAJOR_VERSION}_2.12-${ICEBERG_VERSION}.jar
-
-# Download AWS bundle
-RUN curl -s https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/${ICEBERG_VERSION}/iceberg-aws-bundle-${ICEBERG_VERSION}.jar -Lo /opt/spark/jars/iceberg-aws-bundle-${ICEBERG_VERSION}.jar
-
-# Install AWS CLI
-RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
- && unzip awscliv2.zip \
- && sudo ./aws/install \
- && rm awscliv2.zip \
- && rm -rf aws/
-
-# Add iceberg spark runtime jar to IJava classpath
-ENV IJAVA_CLASSPATH=/opt/spark/jars/*
 
 RUN mkdir -p /home/iceberg/data \
  && curl https://data.cityofnewyork.us/resource/tg4x-b46p.json > /home/iceberg/data/nyc_film_permits.json \
@@ -90,22 +45,69 @@ RUN mkdir -p /home/iceberg/data \
  && curl https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2021-05.parquet -o /home/iceberg/data/yellow_tripdata_2021-05.parquet \
  && curl https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2021-04.parquet -o /home/iceberg/data/yellow_tripdata_2021-04.parquet
 
+# Install Jupyter and other python deps
+COPY requirements.txt .
+RUN pip3 install -r requirements.txt
+
+# Add scala kernel via spylon-kernel
+# RUN python3 -m spylon_kernel install
+
+# Download and install IJava jupyter kernel
+# RUN curl https://github.com/SpencerPark/IJava/releases/download/v1.3.0/ijava-1.3.0.zip -Lo ijava-1.3.0.zip \
+#   && unzip ijava-1.3.0.zip \
+#   && python3 install.py --sys-prefix \
+#   && rm ijava-1.3.0.zip
+
+# Optional env variables
+ENV SPARK_HOME=${SPARK_HOME:-"/opt/spark"}
+ENV PYTHONPATH=$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-0.10.9.7-src.zip:$PYTHONPATH
+
+WORKDIR ${SPARK_HOME}
+
+ENV SPARK_VERSION=3.5.0
+ENV SPARK_MAJOR_VERSION=3.5
+ENV ICEBERG_VERSION=1.4.3
+
+# Download spark
+RUN mkdir -p ${SPARK_HOME} \
+ && curl https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz -o spark-${SPARK_VERSION}-bin-hadoop3.tgz \
+ && tar xvzf spark-${SPARK_VERSION}-bin-hadoop3.tgz --directory /opt/spark --strip-components 1 \
+ && rm -rf spark-${SPARK_VERSION}-bin-hadoop3.tgz
+
+# Download iceberg spark runtime
+RUN curl https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-${SPARK_MAJOR_VERSION}_2.12/${ICEBERG_VERSION}/iceberg-spark-runtime-${SPARK_MAJOR_VERSION}_2.12-${ICEBERG_VERSION}.jar -Lo /opt/spark/jars/iceberg-spark-runtime-${SPARK_MAJOR_VERSION}_2.12-${ICEBERG_VERSION}.jar
+
+# Download AWS bundle
+RUN curl -s https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/${ICEBERG_VERSION}/iceberg-aws-bundle-${ICEBERG_VERSION}.jar -Lo /opt/spark/jars/iceberg-aws-bundle-${ICEBERG_VERSION}.jar
+
+# Install AWS CLI
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip" \
+ && unzip awscliv2.zip \
+ && sudo ./aws/install \
+ && rm awscliv2.zip \
+ && rm -rf aws/
+
+# Add iceberg spark runtime jar to IJava classpath
+ENV IJAVA_CLASSPATH=/opt/spark/jars/*
+
 RUN mkdir -p /home/iceberg/localwarehouse /home/iceberg/notebooks /home/iceberg/warehouse /home/iceberg/spark-events /home/iceberg
 COPY notebooks/ /home/iceberg/notebooks
 
+ENV PYSPARK_DRIVER_PYTHON_OPTS="--notebook-dir=/home/iceberg/notebooks --ip='*' --NotebookApp.token='' --NotebookApp.password='' --port=8888 --no-browser --allow-root"
+
 # Add a notebook command
-RUN echo '#! /bin/sh' >> /bin/notebook \
- && echo 'export PYSPARK_DRIVER_PYTHON=jupyter-notebook' >> /bin/notebook \
- && echo "export PYSPARK_DRIVER_PYTHON_OPTS=\"--notebook-dir=/home/iceberg/notebooks --ip='*' --NotebookApp.token='' --NotebookApp.password='' --port=8888 --no-browser --allow-root\"" >> /bin/notebook \
- && echo "pyspark" >> /bin/notebook \
- && chmod u+x /bin/notebook
+# RUN echo '#! /bin/sh' >> /bin/notebook \
+#  && echo 'export PYSPARK_DRIVER_PYTHON=jupyter-notebook' >> /bin/notebook \
+#  && echo "export PYSPARK_DRIVER_PYTHON_OPTS=\"--notebook-dir=/home/iceberg/notebooks --ip='*' --NotebookApp.token='' --NotebookApp.password='' --port=8888 --no-browser --allow-root\"" >> /bin/notebook \
+#  && chmod u+x /bin/notebook
+ # && echo "pyspark" >> /bin/notebook \
 
 # Add a pyspark-notebook command (alias for notebook command for backwards-compatibility)
-RUN echo '#! /bin/sh' >> /bin/pyspark-notebook \
- && echo 'export PYSPARK_DRIVER_PYTHON=jupyter-notebook' >> /bin/pyspark-notebook \
- && echo "export PYSPARK_DRIVER_PYTHON_OPTS=\"--notebook-dir=/home/iceberg/notebooks --ip='*' --NotebookApp.token='' --NotebookApp.password='' --port=8888 --no-browser --allow-root\"" >> /bin/pyspark-notebook \
- && echo "pyspark" >> /bin/pyspark-notebook \
- && chmod u+x /bin/pyspark-notebook
+# RUN echo '#! /bin/sh' >> /bin/pyspark-notebook \
+#  && echo 'export PYSPARK_DRIVER_PYTHON=jupyter-notebook' >> /bin/pyspark-notebook \
+ # && echo "export PYSPARK_DRIVER_PYTHON_OPTS=\"--notebook-dir=/home/iceberg/notebooks --ip='*' --NotebookApp.token='' --NotebookApp.password='' --port=8888 --no-browser --allow-root\"" >> /bin/pyspark-notebook \
+ # && chmod u+x /bin/pyspark-notebook
+ # && echo "pyspark" >> /bin/pyspark-notebook \
 
 RUN mkdir -p /root/.ipython/profile_default/startup
 COPY ipython/startup/00-prettytables.py /root/.ipython/profile_default/startup
@@ -122,4 +124,4 @@ COPY .pyiceberg.yaml /root/.pyiceberg.yaml
 COPY entrypoint.sh .
 
 ENTRYPOINT ["./entrypoint.sh"]
-CMD ["notebook"]
+CMD ["jupyter lab $PYSPARK_DRIVER_PYTHON_OPTS"]
