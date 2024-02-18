@@ -1,6 +1,6 @@
 jupyterlab==4.0.10
 pyiceberg[pyarrow,duckdb,pandas]==0.5.1
 jupysql==0.10.7
-matplotlib==3.8.2
+matplotlib==3.8.3
 scipy==1.11.4
 duckdb-engine==0.10.0
